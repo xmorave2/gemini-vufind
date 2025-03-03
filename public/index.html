@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUX mit Claude und Personas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #f5f5f5;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #searchInput {
+            flex-grow: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .search-button {
+            padding: 12px 25px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .search-types {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .search-type {
+            padding: 10px;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            background: white;
+            color: #4CAF50;
+        }
+        .search-type.active {
+            background: #4CAF50;
+            color: white;
+        }
+        .search-description {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 5px;
+            color: #2e7d32;
+        }
+        .book-card {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .book-title {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .book-meta {
+            color: #666;
+            margin: 5px 0;
+        }
+        .format-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border-radius: 3px;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .result-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        .result-item h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .result-item p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .result-item .metadata {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+        .result-item .metadata span {
+            margin-right: 15px;
+        }
+        .result-item .subjects {
+            margin-top: 10px;
+        }
+        .result-item .subjects span {
+            background-color: #f0f0f0;
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-right: 5px;
+            font-size: 0.9em;
+        }
+        .result-item .languages {
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .result-item .series {
+            margin-top: 5px;
+            font-style: italic;
+            color: #666;
+        }
+        .search-params {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .search-params h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .search-params pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>LUX mit Claude und Personas</h1>
+    
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Suchbegriff eingeben...">
+        <button onclick="searchBooks()" class="search-button">Suchen</button>
+    </div>
+
+    <div class="search-types">
+        <button class="search-type active" onclick="setSearchType('standard')">Standard-Suche</button>
+        <button class="search-type" onclick="setSearchType('known-item')">Titel</button>
+        <button class="search-type" onclick="setSearchType('topic')">Literatur über</button>
+        <button class="search-type" onclick="setSearchType('basics')">Grundlagenliteratur</button>
+        <button class="search-type" onclick="setSearchType('article')">Artikel</button>
+    </div>
+
+    <div id="searchDescription" class="search-description">
+        Standard-Suche über alle Felder
+    </div>
+
+    <div id="searchParams" class="search-params" style="display: none;">
+        <h3>VuFind Suchparameter:</h3>
+        <pre id="searchParamsContent"></pre>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        let currentSearchType = 'standard';
+        
+        function setSearchType(type) {
+            currentSearchType = type;
+            document.querySelectorAll('.search-type').forEach(button => {
+                button.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            const descriptions = {
+                'standard': 'Intelligente Suche mit automatischer Analyse der Suchanfrage',
+                'known-item': 'Suche nach Titel, ISBN, ISSN oder DOI',
+                'topic': 'Suche nach Literatur zu einem Thema',
+                'basics': 'Suche nach Einführungsliteratur und Grundlagenwerken',
+                'article': 'Suche nach aktuellen Artikeln (nach Jahr sortiert)'
+            };
+            
+            document.getElementById('searchDescription').textContent = descriptions[type];
+            document.getElementById('searchInput').placeholder = 
+                type === 'known-item' ? 'Titel, ISBN, ISSN oder DOI eingeben...' :
+                type === 'topic' ? 'Thema eingeben...' :
+                type === 'basics' ? 'Thema für Grundlagenliteratur eingeben...' :
+                type === 'article' ? 'Suchbegriff für Artikel eingeben...' :
+                'Suchbegriff eingeben...';
+        }
+
+        async function searchBooks() {
+            const searchTerm = document.getElementById('searchInput').value;
+            const resultsDiv = document.getElementById('results');
+            const searchParamsDiv = document.getElementById('searchParams');
+            const searchParamsContent = document.getElementById('searchParamsContent');
+            
+            if (!searchTerm) {
+                resultsDiv.innerHTML = '<p class="error">Bitte geben Sie einen Suchbegriff ein.</p>';
+                return;
+            }
+
+            try {
+                // Debug: Zeige Suchanfrage
+                console.log('Frontend sending request:', { 
+                    searchTerm, 
+                    searchType: currentSearchType 
+                });
+
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        searchTerm,
+                        searchType: currentSearchType
+                    })
+                });
+
+                const data = await response.json();
+
+                // Zeige Suchparameter an
+                if (data.searchParams) {
+                    searchParamsDiv.style.display = 'block';
+                    searchParamsContent.textContent = JSON.stringify(data.searchParams, null, 2);
+                } else {
+                    searchParamsDiv.style.display = 'none';
+                }
+
+                // Debug: Zeige empfangene Daten
+                console.log('Frontend received data:', data);
+                console.log('Data type:', typeof data);
+                console.log('Records:', data.records);
+                console.log('Result count:', data.resultCount);
+
+                if (data.error) {
+                    console.error('Error from server:', data.error);
+                    resultsDiv.innerHTML = `<p class="error">${data.error}</p>`;
+                    return;
+                }
+
+                // Prüfe ob Ergebnisse vorhanden sind
+                if (!data.records || data.records.length === 0) {
+                    console.log('No results found');
+                    resultsDiv.innerHTML = '<p>Keine Ergebnisse gefunden.</p>';
+                    return;
+                }
+
+                displayResults(data);
+
+            } catch (error) {
+                console.error('Search Error:', error);
+                resultsDiv.innerHTML = `<p class="error">Ein Fehler ist aufgetreten: ${error.message}</p>`;
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            
+            if (data.error) {
+                resultsDiv.innerHTML = `<p class="error">Fehler: ${data.error}</p>`;
+                return;
+            }
+            
+            if (data.records.length === 0) {
+                resultsDiv.innerHTML = '<p>Keine Ergebnisse gefunden.</p>';
+                return;
+            }
+            
+            resultsDiv.innerHTML = `<p>Gefunden: ${data.resultCount} Ergebnisse</p>`;
+            
+            data.records.forEach(record => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                
+                // Basis-Informationen
+                let html = `
+                    <h3>${record.title}</h3>
+                    <div class="metadata">
+                        ${record.authors && record.authors.length > 0 ? `<p><strong>Autoren:</strong> ${record.authors.join('; ')}</p>` : ''}
+                        ${record.publishDate !== 'Kein Jahr' ? `<p><strong>Jahr:</strong> ${record.publishDate}</p>` : ''}
+                        ${record.publisher !== 'Unbekannt' ? `<p><strong>Verlag:</strong> ${record.publisher}</p>` : ''}
+                        ${record.placeOfPublication !== 'Unbekannt' ? `<p><strong>Ort:</strong> ${record.placeOfPublication}</p>` : ''}
+                    </div>
+                `;
+
+                // Identifikatoren
+                let identifiers = [];
+                if (record.isbn !== 'Unbekannt') identifiers.push(`ISBN: ${record.isbn}`);
+                if (record.issn !== 'Unbekannt') identifiers.push(`ISSN: ${record.issn}`);
+                if (record.doi !== 'Unbekannt') identifiers.push(`DOI: ${record.doi}`);
+                
+                if (identifiers.length > 0) {
+                    html += `<div class="identifiers"><strong>Identifikatoren:</strong> ${identifiers.join(' | ')}</div>`;
+                }
+
+                // Format und Ausgabe
+                if (record.format !== 'Unbekannt') {
+                    html += `<div class="format"><strong>Format:</strong> ${record.format}</div>`;
+                }
+                if (record.edition !== 'Unbekannt') {
+                    html += `<div class="edition"><strong>Ausgabe:</strong> ${record.edition}</div>`;
+                }
+
+                // Zusammenfassung
+                if (record.summary !== 'Keine Zusammenfassung verfügbar') {
+                    html += `<div class="summary"><strong>Zusammenfassung:</strong> ${record.summary}</div>`;
+                }
+
+                // Schlagworte
+                if (record.subjects && record.subjects.length > 0) {
+                    html += `
+                        <div class="subjects">
+                            <strong>Schlagworte:</strong>
+                            ${record.subjects.map(subject => `<span>${subject}</span>`).join('')}
+                        </div>
+                    `;
+                }
+
+                // Sprachen
+                if (record.languages && record.languages.length > 0) {
+                    html += `
+                        <div class="languages">
+                            <strong>Sprachen:</strong> ${record.languages.join(', ')}
+                        </div>
+                    `;
+                }
+
+                // Reihe
+                if (record.series && record.series.length > 0) {
+                    html += `
+                        <div class="series">
+                            <strong>Reihe:</strong> ${record.series.join(', ')}
+                        </div>
+                    `;
+                }
+
+                resultItem.innerHTML = html;
+                resultsDiv.appendChild(resultItem);
+            });
+        }
+
+        // Enter-Taste für Suche
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchBooks();
+            }
+        });
+    </script>
+</body>
+</html>
