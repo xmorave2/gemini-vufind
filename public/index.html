@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LUX mit Claude und Personas</title>
+    <title>HCU Testing mit Claude und Personas</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,7 +34,7 @@
         }
         .search-types {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: 1fr;
             gap: 10px;
             margin-bottom: 20px;
         }
@@ -50,6 +50,26 @@
         .search-type.active {
             background: #4CAF50;
             color: white;
+        }
+        .manual-search-heading {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #666;
+            font-size: 0.9em;
+            text-align: center;
+        }
+        .search-type.secondary {
+            font-size: 0.85em;
+            padding: 6px;
+            margin: 2px 0;
+            white-space: nowrap;
+        }
+        .secondary-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            margin: 0 auto;
+            max-width: 400px;
         }
         .search-description {
             margin-bottom: 20px;
@@ -151,7 +171,7 @@
     </style>
 </head>
 <body>
-    <h1>LUX mit Claude und Personas</h1>
+    <h1>HCU mit Claude und Personas</h1>
     
     <div class="search-box">
         <input type="text" id="searchInput" placeholder="Suchbegriff eingeben...">
@@ -159,15 +179,22 @@
     </div>
 
     <div class="search-types">
-        <button class="search-type active" onclick="setSearchType('standard')">Standard-Suche</button>
-        <button class="search-type" onclick="setSearchType('known-item')">Titel</button>
-        <button class="search-type" onclick="setSearchType('topic')">Literatur über</button>
-        <button class="search-type" onclick="setSearchType('basics')">Grundlagenliteratur</button>
-        <button class="search-type" onclick="setSearchType('article')">Artikel</button>
+        <button class="search-type active" onclick="setSearchType('standard')">Suche mit Claude</button>
+        <div class="manual-search-heading">Manuelle Auswahl des Suchtyps</div>
+        <div class="secondary-buttons">
+            <button class="search-type secondary" onclick="setSearchType('known-item')">Known Item</button>
+            <button class="search-type secondary" onclick="setSearchType('topic')">Thema</button>
+            <button class="search-type secondary" onclick="setSearchType('basics')">Grundlagenliteratur</button>
+            <button class="search-type secondary" onclick="setSearchType('article')">Artikel</button>
+        </div>
     </div>
 
     <div id="searchDescription" class="search-description">
-        Standard-Suche über alle Felder
+        Intelligente Suche mit automatischer Analyse durch Claude
+    </div>
+
+    <div id="claudeAnalysis" class="search-description" style="display: none; background: #e3f2fd; color: #1565c0;">
+        Von Claude erkannter Suchtyp: <span id="detectedSearchType"></span>
     </div>
 
     <div id="searchParams" class="search-params" style="display: none;">
@@ -188,7 +215,7 @@
             event.target.classList.add('active');
             
             const descriptions = {
-                'standard': 'Intelligente Suche mit automatischer Analyse der Suchanfrage',
+                'standard': 'Intelligente Suche mit automatischer Analyse durch Claude',
                 'known-item': 'Suche nach Titel, ISBN, ISSN oder DOI',
                 'topic': 'Suche nach Literatur zu einem Thema',
                 'basics': 'Suche nach Einführungsliteratur und Grundlagenwerken',
@@ -209,6 +236,8 @@
             const resultsDiv = document.getElementById('results');
             const searchParamsDiv = document.getElementById('searchParams');
             const searchParamsContent = document.getElementById('searchParamsContent');
+            const claudeAnalysisDiv = document.getElementById('claudeAnalysis');
+            const detectedSearchTypeSpan = document.getElementById('detectedSearchType');
             
             if (!searchTerm) {
                 resultsDiv.innerHTML = '<p class="error">Bitte geben Sie einen Suchbegriff ein.</p>';
@@ -239,8 +268,17 @@
                 if (data.searchParams) {
                     searchParamsDiv.style.display = 'block';
                     searchParamsContent.textContent = JSON.stringify(data.searchParams, null, 2);
+                    
+                    // Zeige den von Claude erkannten Suchtyp an
+                    if (data.detectedSearchType) {
+                        claudeAnalysisDiv.style.display = 'block';
+                        detectedSearchTypeSpan.textContent = data.detectedSearchType;
+                    } else {
+                        claudeAnalysisDiv.style.display = 'none';
+                    }
                 } else {
                     searchParamsDiv.style.display = 'none';
+                    claudeAnalysisDiv.style.display = 'none';
                 }
 
                 // Debug: Zeige empfangene Daten
@@ -296,73 +334,12 @@
                     <div class="metadata">
                         ${record.authors && record.authors.length > 0 ? `<p><strong>Autoren:</strong> ${record.authors.join('; ')}</p>` : ''}
                         ${record.publishDate !== 'Kein Jahr' ? `<p><strong>Jahr:</strong> ${record.publishDate}</p>` : ''}
-                        ${record.publisher !== 'Unbekannt' ? `<p><strong>Verlag:</strong> ${record.publisher}</p>` : ''}
-                        ${record.placeOfPublication !== 'Unbekannt' ? `<p><strong>Ort:</strong> ${record.placeOfPublication}</p>` : ''}
                     </div>
                 `;
-
-                // Identifikatoren
-                let identifiers = [];
-                if (record.isbn !== 'Unbekannt') identifiers.push(`ISBN: ${record.isbn}`);
-                if (record.issn !== 'Unbekannt') identifiers.push(`ISSN: ${record.issn}`);
-                if (record.doi !== 'Unbekannt') identifiers.push(`DOI: ${record.doi}`);
-                
-                if (identifiers.length > 0) {
-                    html += `<div class="identifiers"><strong>Identifikatoren:</strong> ${identifiers.join(' | ')}</div>`;
-                }
-
-                // Format und Ausgabe
-                if (record.format !== 'Unbekannt') {
-                    html += `<div class="format"><strong>Format:</strong> ${record.format}</div>`;
-                }
-                if (record.edition !== 'Unbekannt') {
-                    html += `<div class="edition"><strong>Ausgabe:</strong> ${record.edition}</div>`;
-                }
-
-                // Zusammenfassung
-                if (record.summary !== 'Keine Zusammenfassung verfügbar') {
-                    html += `<div class="summary"><strong>Zusammenfassung:</strong> ${record.summary}</div>`;
-                }
-
-                // Schlagworte
-                if (record.subjects && record.subjects.length > 0) {
-                    html += `
-                        <div class="subjects">
-                            <strong>Schlagworte:</strong>
-                            ${record.subjects.map(subject => `<span>${subject}</span>`).join('')}
-                        </div>
-                    `;
-                }
-
-                // Sprachen
-                if (record.languages && record.languages.length > 0) {
-                    html += `
-                        <div class="languages">
-                            <strong>Sprachen:</strong> ${record.languages.join(', ')}
-                        </div>
-                    `;
-                }
-
-                // Reihe
-                if (record.series && record.series.length > 0) {
-                    html += `
-                        <div class="series">
-                            <strong>Reihe:</strong> ${record.series.join(', ')}
-                        </div>
-                    `;
-                }
-
                 resultItem.innerHTML = html;
                 resultsDiv.appendChild(resultItem);
             });
         }
-
-        // Enter-Taste für Suche
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                searchBooks();
-            }
-        });
     </script>
 </body>
 </html>

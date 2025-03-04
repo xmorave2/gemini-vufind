@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const VUFIND_API_BASE = 'https://lux.leuphana.de/vufind/api/v1';
+const VUFIND_API_BASE = 'https://hcu-testing-vufind.dev.effective-webwork.de/vufind/api/v1';
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
@@ -36,7 +36,7 @@ function cleanSearchQuery(searchTerm) {
     return words.join(' ').trim();
 }
 
-// Funktion zur Analyse der Suchbegriffe mit Claude
+// Funktion zur Analyse der Suchbegriffe mit Claude (Claude-Supported Search)
 async function analyzeSearchQuery(searchTerm) {
     try {
         // Bereinige die Suchanfrage
@@ -48,25 +48,23 @@ async function analyzeSearchQuery(searchTerm) {
                 {
                     role: "system",
                     content: `Du bist ein Experte für bibliothekarische Suchen. Analysiere die Suchanfrage und gib ein JSON-Objekt zurück mit:
-                    - searchType: Der passendste Suchtyp (topic/basics/article)
+                    - searchType: Der passendste Suchtyp (topic/basics/article/known-item)
                     - mainSearchTerm: Der eigentliche Suchbegriff (ohne Stop-Wörter)
                     - filters: Array von Filtern
                     - sort: relevance/publicationDates
                     
                     Regeln für die Analyse:
-                    1. Wenn der Suchbegriff Wörter wie "Einführung", "Grundlagen", "Handbuch", "Lehrbuch" enthält oder impliziert, verwende "basics"
-                    2. Wenn nach aktuellen Forschungsergebnissen oder Artikeln gesucht wird, verwende "article"
-                    3. Wenn der Suchbegriff einen oder mehrere Autorennamen enthält (z.B. "macroeconomics mankiw" oder "principles of economics mankiw taylor"), verwende "known-item"
-                    4. Wenn nach Literatur über eine Person gesucht wird (z.B. "über", "von", "zu", "literatur über", "zeig mir", "biographie über", "leben von"), verwende "topic" mit entsprechenden Filtern
-                    5. In allen anderen Fällen verwende "topic"
+                    1. Known-Item-Suche (searchType: "known-item"):
+                       - Wenn ein spezifischer Titel UND Autor genannt wird
+                       - Wenn eine ISBN, DOI oder ISSN genannt wird
+                       - Wenn der Suchbegriff in Anführungszeichen steht (exakte Phrase)
+                       - Wenn "von [Autorenname]" oder "by [Autorenname]" im Suchbegriff vorkommt
+                       - Wenn ein eindeutiger Buchtitel mit Erscheinungsjahr genannt wird
                     
-                    Beispielantworten:
-                    - "zeig mir eine Einführung in die Soziologie" -> {"searchType": "basics", "mainSearchTerm": "soziologie", "filters": [], "sort": "relevance"}
-                    - "ich suche nach aktueller Forschung zu KI" -> {"searchType": "article", "mainSearchTerm": "künstliche intelligenz", "filters": ["publicationDates:[2020 TO 2024]"], "sort": "publicationDates"}
-                    - "kannst du mir macroeconomics von mankiw finden" -> {"searchType": "known-item", "mainSearchTerm": "macroeconomics", "author": "mankiw", "filters": [], "sort": "relevance"}
-                    - "zeig mir biographien über theodor fontane" -> {"searchType": "topic", "mainSearchTerm": "theodor fontane", "filters": ["subject:Biography"], "sort": "relevance"}
-                    - "über goethe" -> {"searchType": "topic", "mainSearchTerm": "goethe", "searchFields": ["title", "subject"], "filters": [], "sort": "relevance"}
-                    - "Literatur über Nachhaltigkeit" -> {"searchType": "topic", "mainSearchTerm": "nachhaltigkeit", "searchFields": ["title", "subject"], "filters": [], "sort": "relevance"}`
+                    2. Wenn der Suchbegriff Wörter wie "Einführung", "Grundlagen", "Handbuch", "Lehrbuch" enthält, verwende "basics"
+                    3. Wenn nach aktuellen Forschungsergebnissen oder Artikeln gesucht wird, verwende "article"
+                    4. Wenn nach Literatur über eine Person gesucht wird (z.B. "über", "von", "zu", "literatur über"), verwende "topic" mit entsprechenden Filtern
+                    5. In allen anderen Fällen verwende "topic"`
                 },
                 {
                     role: "user",
@@ -92,7 +90,7 @@ async function analyzeSearchQuery(searchTerm) {
 }
 
 app.post('/api/search', async (req, res) => {
-    const { searchTerm, searchType } = req.body;
+    const { searchTerm } = req.body;
     
     if (!searchTerm) {
         return res.json({ 
@@ -105,131 +103,116 @@ app.post('/api/search', async (req, res) => {
         let searchParams = new URLSearchParams();
         
         // Basis-Parameter
-        searchParams.append('lookfor', searchTerm);
         searchParams.append('limit', '20');
-        searchParams.append('type', 'AllFields');
 
-        switch(searchType) {
-            case 'standard':
-                // Claude-Analyse der Suchanfrage für die Standard-Suche
-                const analysis = await analyzeSearchQuery(searchTerm);
-                
-                // Parameter basierend auf der Analyse setzen
-                searchParams.set('type', 'AllFields');
-                searchParams.set('lookfor', analysis.mainSearchTerm);
-                
-                // Felder basierend auf Suchtyp setzen
-                switch(analysis.searchType) {
-                    case 'topic':
-                        // Wenn spezifische Suchfelder definiert sind, verwende diese
-                        if (analysis.searchFields) {
-                            analysis.searchFields.forEach(field => {
-                                searchParams.append('field[]', field);
-                            });
-                        } else {
-                            // Standardfelder für Topic-Suche
-                            searchParams.append('field[]', 'title');
-                            searchParams.append('field[]', 'subject');
-                            searchParams.append('field[]', 'keywords');
-                        }
-                        
-                        // Wenn Biographie-Terme vorhanden sind, füge eine spezielle Titel-Suche hinzu
-                        if (analysis.biographyTerms) {
-                            const biographyQuery = analysis.biographyTerms.map(term => `title:"${term}"`).join(' OR ');
-                            const personQuery = `title:"${analysis.mainSearchTerm}"`;
-                            searchParams.set('lookfor', `(${biographyQuery}) AND ${personQuery}`);
-                        } else if (analysis.searchFields) {
-                            // Wenn spezifische Suchfelder definiert sind, suche in beiden Feldern
-                            const fieldQueries = analysis.searchFields.map(field => `${field}:"${analysis.mainSearchTerm}"`);
-                            searchParams.set('lookfor', `(${fieldQueries.join(' OR ')})`);
-                        }
-                        break;
-                    case 'basics':
-                        searchParams.append('field[]', 'title');
-                        searchParams.append('field[]', 'subject');
-                        break;
-                    case 'article':
-                        searchParams.append('field[]', 'title');
-                        searchParams.append('field[]', 'subject');
-                        break;
-                    case 'known-item':
-                        searchParams.set('type', 'Combined');
-                        searchParams.set('lookfor', analysis.mainSearchTerm);
-                        if (analysis.author) {
-                            searchParams.append('field[]', 'title');
-                            searchParams.append('field[]', 'author');
-                            searchParams.append('filter[]', `author:"${analysis.author}"`);
-                        }
-                        break;
-                }
+        // Standardfelder für alle Suchen
+        const standardFields = [
+            'title',
+            'author',
+            'author_primary',
+            'author_secondary',
+            'author_corporate',
+            'authors',
+            'formats',
+            'subjects',
+            'publishDate',
+            'edition',
+            'cleanIsbn',
+            'cleanIssn',
+            'cleanDoi',
+            'publisher',
+            'placesOfPublication',
+            'languages',
+            'series'
+        ];
+        
+        standardFields.forEach(field => {
+            searchParams.append('field[]', field);
+        });
 
-                // Filter anwenden
-                analysis.filters.forEach(filter => {
-                    searchParams.append('filter[]', filter);
-                });
+        // Füge zusätzliche Felder für die Detailsuche hinzu
+        const detailFields = [
+            'id',
+            'recordtype',
+            'fullrecord',
+            'source',
+            'title_full',
+            'title_short',
+            'title_sub',
+            'title_auth',
+            'physical',
+            'publisher',
+            'publishDate',
+            'description',
+            'contents',
+            'url',
+            'note'
+        ];
 
-                // Sortierung setzen
-                searchParams.append('sort', analysis.sort);
-                break;
+        // Kombiniere alle Felder für die Detailsuche
+        const allFields = [...standardFields, ...detailFields];
 
+        // Claude-Analyse der Suchanfrage
+        const analysis = await analyzeSearchQuery(searchTerm);
+        
+        console.log('\n=== Claude-Supported Search: Detaillierte Suchanfragen-Analyse ===');
+        console.log('Analyseergebnis:', analysis);
+        
+        // Parameter basierend auf der Analyse setzen
+        switch(analysis.searchType) {
             case 'known-item':
-                searchParams.set('type', 'Combined');
-                searchParams.append('field[]', 'title');
-                searchParams.append('field[]', 'cleanIsbn');
-                searchParams.append('field[]', 'cleanIssn');
-                searchParams.append('field[]', 'cleanDoi');
-                searchParams.append('sort', 'relevance');
+                searchParams.set('type', 'Title');
+                searchParams.set('lookfor', analysis.mainSearchTerm);
                 break;
-            
-            case 'topic':
-                searchParams.set('type', 'AllFields');
-                searchParams.set('lookfor', searchTerm);
-                searchParams.append('field[]', 'title');
-                searchParams.append('field[]', 'subject');
-                searchParams.append('field[]', 'keywords');
-                 // Wenn es sich um eine Biographie-Suche handelt
-                if (searchTerm.toLowerCase().includes('biograph')) {
-                    searchParams.append('filter[]', 'subject:Biography');
-                }
-                searchParams.append('sort', 'relevance');
-                break;
-            
+
             case 'basics':
                 const basicTerms = [
-                    // Englische Begriffe
                     'Introduction', 'Handbook', 'Textbook',
                     'Fundamentals', 'Principles', 'Basics',
                     'Guide', 'Manual',
-                    // Deutsche Begriffe
                     'Einführung', 'Lehrbuch', 'Grundlagen',
                     'Handbuch', 'Übersicht'
                 ];
                 
                 searchParams.set('type', 'AllFields');
-                // Suche nach dem Suchbegriff im Titel oder Subject
-                const titleSubjectQuery = `(title:"${searchTerm}" OR subject:"${searchTerm}")`;
-                // Suche nach einem der Grundlagenbegriffe
+                const titleSubjectQuery = `(title:"${analysis.mainSearchTerm}" OR subjects:"${analysis.mainSearchTerm}")`;
                 const basicTermsQuery = `(${basicTerms.join(' OR ')})`;
-                // Kombiniere beide Bedingungen
-                const basicSearchQuery = `${titleSubjectQuery} AND ${basicTermsQuery}`;
-                searchParams.set('lookfor', basicSearchQuery);
-                searchParams.append('sort', 'relevance');
+                searchParams.set('lookfor', `${titleSubjectQuery} AND ${basicTermsQuery}`);
                 break;
-            
+
             case 'article':
                 searchParams.set('type', 'AllFields');
-                searchParams.append('filter[]', 'publicationDates:[2010 TO 2024]');
-                searchParams.append('sort', 'publicationDates desc');
+                searchParams.set('lookfor', analysis.mainSearchTerm);
+                searchParams.append('filter[]', 'publishDate:[2010 TO 2024]');
+                searchParams.append('filter[]', 'format:"Article"');
+                searchParams.append('sort', 'publishDate desc');
                 break;
-            
+
+            case 'topic':
             default:
-                searchParams.append('sort', 'relevance');
+                searchParams.set('type', 'AllFields');
+                searchParams.set('lookfor', analysis.mainSearchTerm);
+                if (analysis.searchFields) {
+                    analysis.searchFields.forEach(field => {
+                        searchParams.append('field[]', field);
+                    });
+                }
+                break;
         }
+
+        // Wende zusätzliche Filter an
+        if (analysis.filters) {
+            analysis.filters.forEach(filter => {
+                searchParams.append('filter[]', filter);
+            });
+        }
+
+        // Setze Sortierung
+        searchParams.append('sort', analysis.sort || 'relevance');
 
         // Debug: URL ausgeben
         const searchUrl = `${VUFIND_API_BASE}/search?${searchParams.toString()}`;
-        console.log('\n=== VuFind Suchanfrage ===');
-        console.log('Suchtyp:', searchType);
+        console.log('\n=== Claude-Supported Search: VuFind Suchanfrage ===');
         console.log('Suchbegriff:', searchTerm);
         console.log('Suchparameter:', Object.fromEntries(searchParams));
         console.log('Vollständige URL:', searchUrl);
@@ -252,56 +235,126 @@ app.post('/api/search', async (req, res) => {
 
         const data = await response.json();
 
-        // Debug: API-Antwort
-        console.log('API Response:', JSON.stringify(data, null, 2));
+        // Debug: Vollständige API-Antwort
+        console.log('\n=== Claude-Supported Search: API-Antwort ===');
+        console.log('Anzahl gefundener Records:', data.resultCount);
+        console.log('Status:', data.status);
+        console.log('Vollständige Antwort:', JSON.stringify(data, null, 2));
+        console.log('========================\n');
 
         // Prüfe ob records vorhanden sind
         if (!data.records) {
-            console.error('No records in response');
+            console.error('Claude-Supported Search: Keine Records in der Antwort');
             return res.json({ records: [], resultCount: 0 });
         }
 
         const formattedResponse = {
-            records: data.records.map(record => {
-                let contributors = [];
-                
-                // Verarbeitung der Autoren gemäß der VuFind-Dokumentation
-                if (record.authors?.main) {
-                    contributors = contributors.concat(record.authors.main);
-                }
-                
-                if (record.authors?.secondary) {
-                    contributors = contributors.concat(record.authors.secondary);
-                }
-                
-                if (record.authors?.corporate) {
-                    contributors = contributors.concat(record.authors.corporate);
-                }
+            records: await Promise.all(data.records.map(async record => {
+                try {
+                    // Hole detaillierte Daten für jeden Record basierend auf dem Titel
+                    const encodedTitle = encodeURIComponent(record.title);
+                    const detailUrl = `${VUFIND_API_BASE}/search?lookfor=${encodedTitle}&type=Title&limit=1&${allFields.map(field => `field[]=${field}`).join('&')}`;
+                    
+                    console.log('\n=== Detail-Anfrage ===');
+                    console.log('URL:', detailUrl);
+                    
+                    const detailResponse = await fetch(detailUrl, {
+                        headers: {
+                            'User-Agent': 'BookSearch/1.0',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (!detailResponse.ok) {
+                        throw new Error(`HTTP error! status: ${detailResponse.status}`);
+                    }
 
-                return {
-                    title: record.title || 'Kein Titel',
-                    author: contributors.length > 0 ? contributors.join('; ') : 'Keine Autoren/Editoren',
-                    publishDate: record.publicationDates?.[0] || 'Kein Jahr',
-                    format: Array.isArray(record.formats) ? record.formats[0] : 'Unbekannt',
-                    subjects: record.subjects || [],
-                    edition: record.edition || 'Unbekannt',
-                    isbn: record.cleanIsbn || 'Unbekannt',
-                    doi: record.cleanDoi || 'Unbekannt',
-                    issn: record.cleanIssn || 'Unbekannt',
-                    publisher: record.publishers?.[0] || 'Unbekannt',
-                    placeOfPublication: record.placesOfPublication?.[0] || 'Unbekannt',
-                    summary: record.summary?.[0] || 'Keine Zusammenfassung verfügbar',
-                    languages: record.languages || [],
-                    series: record.series || []
-                };
-            }),
+                    const detailData = await detailResponse.json();
+                    
+                    if (!detailData.records || detailData.records.length === 0) {
+                        throw new Error('Keine Detail-Daten verfügbar');
+                    }
+
+                    const detailRecord = detailData.records[0];
+                    
+                    console.log('\n=== Detail-Daten ===');
+                    console.log('Gefundener Detail-Record:', JSON.stringify(detailRecord, null, 2));
+
+                    // Formatierung des Records mit Detail-Daten
+                    // Extrahiere Autoren
+                    let authors = [];
+                    
+                    console.log('\n=== Debug: Autorendaten ===');
+                    console.log('Rohdaten author:', JSON.stringify(detailRecord.author, null, 2));
+                    console.log('Rohdaten authors:', JSON.stringify(detailRecord.authors, null, 2));
+                    
+                    // Extrahiere Autoren aus dem authors-Objekt
+                    if (detailRecord.authors) {
+                        console.log('\n=== Verarbeitung der Autorendaten ===');
+                        
+                        // Füge primäre Autoren hinzu
+                        if (detailRecord.authors.primary && detailRecord.authors.primary.length > 0) {
+                            console.log('Primäre Autoren:', detailRecord.authors.primary);
+                            authors = authors.concat(detailRecord.authors.primary);
+                        }
+                        
+                        // Füge sekundäre Autoren hinzu
+                        if (detailRecord.authors.secondary) {
+                            const secondaryAuthors = Object.keys(detailRecord.authors.secondary);
+                            console.log('Sekundäre Autoren:', secondaryAuthors);
+                            authors = authors.concat(secondaryAuthors);
+                        }
+                        
+                        // Füge corporate Autoren hinzu
+                        if (detailRecord.authors.corporate && detailRecord.authors.corporate.length > 0) {
+                            console.log('Corporate Autoren:', detailRecord.authors.corporate);
+                            authors = authors.concat(detailRecord.authors.corporate);
+                        }
+                    }
+                    
+                    // Bereinige die Autorennamen (entferne Lebensdaten)
+                    authors = authors.map(author => {
+                        // Entferne Lebensdaten (z.B. "1929-" oder "1949-2023")
+                        return author.replace(/\s+\d{4}(-\d{4})?$/, '');
+                    });
+                    
+                    console.log('Finale Autorenliste:', authors);
+                    console.log('========================\n');
+                    
+                    return {
+                        title: detailRecord.title || record.title || 'Kein Titel',
+                        authors: authors.length > 0 ? authors : ['Keine Autoren/Editoren'],
+                        publishDate: detailRecord.publishDate || 'Kein Jahr',
+                        format: detailRecord.formats?.[0] || 'Unbekannt',
+                        subjects: detailRecord.subjects || [],
+                        edition: detailRecord.edition || 'Unbekannt',
+                        isbn: detailRecord.cleanIsbn || detailRecord.isbn?.[0] || 'Unbekannt',
+                        publisher: detailRecord.publishers || 'Unbekannt',
+                        languages: detailRecord.languages || []
+                    };
+                } catch (error) {
+                    console.error(`Fehler bei der Verarbeitung des Records: ${error.message}`);
+                    // Fallback auf minimale Daten bei Fehler
+                    return {
+                        title: record.title || 'Kein Titel',
+                        authors: ['Keine Autoren/Editoren'],
+                        publishDate: 'Kein Jahr',
+                        formats: 'Unbekannt',
+                        subjects: [],
+                        edition: 'Unbekannt',
+                        isbn: 'Unbekannt',
+                        publishers: 'Unbekannt',
+                        languages: []
+                    };
+                }
+            })),
             resultCount: data.resultCount || 0,
             searchParams: {
-                type: searchType,
                 term: searchTerm,
                 parameters: Object.fromEntries(searchParams),
                 url: searchUrl
-            }
+            },
+            detectedSearchType: analysis.searchType
         };
 
         // Debug: Formatierte Antwort
