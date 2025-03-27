@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HCU Testing mit Claude und Personas</title>
+    <title>HCU Testing mit Claude</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -66,10 +67,22 @@
         }
         .secondary-buttons {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px;
+            grid-template-columns: 1fr;
+            gap: 10px;
             margin: 0 auto;
-            max-width: 400px;
+            max-width: 600px;
+        }
+        .search-type-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px;
+        }
+        .search-type.secondary {
+            font-size: 0.85em;
+            padding: 6px 12px;
+            white-space: nowrap;
+            min-width: 150px;
         }
         .search-description {
             margin-bottom: 20px;
@@ -77,30 +90,55 @@
             background: #e8f5e9;
             border-radius: 5px;
             color: #2e7d32;
+            flex-grow: 1;
         }
         .book-card {
             background: white;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .book-title {
+        .book-card h3 {
             margin: 0 0 10px 0;
             color: #2c3e50;
+            font-size: 1.2em;
         }
-        .book-meta {
+        .book-card p {
+            margin: 8px 0;
             color: #666;
-            margin: 5px 0;
+            font-size: 0.95em;
         }
-        .format-tag {
+        .book-card .authors {
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        .book-card .formats {
             display: inline-block;
-            padding: 3px 8px;
-            background-color: #e8f5e9;
+            background: #e8f5e9;
             color: #2e7d32;
-            border-radius: 3px;
+            padding: 3px 8px;
+            border-radius: 4px;
             font-size: 0.9em;
-            margin-top: 5px;
+        }
+        .book-card .dates {
+            color: #666;
+            font-style: italic;
+        }
+        .book-card .isbn, .book-card .doi {
+            color: #1976d2;
+            font-family: monospace;
+        }
+        .book-card .publisher {
+            color: #666;
+            font-style: italic;
+        }
+        .book-card .summary {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            color: #555;
+            line-height: 1.5;
         }
         .error {
             color: #d32f2f;
@@ -168,29 +206,29 @@
             margin: 0;
             white-space: pre-wrap;
         }
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
-    <h1>HCU mit Claude und Personas</h1>
+    <h1>HCU Suche mit Claude</h1>
+    <div id="searchDescription" class="search-description">
+        Suche gegen den HCU-Katalog mit automatisierter Differenzierung in Knwon-Item und thematischer Suche sowie zusätzlicher Möglichkeit, gezielt nach Grundlagenliteratur zu suchen</div>
     
+
     <div class="search-box">
         <input type="text" id="searchInput" placeholder="Suchbegriff eingeben...">
-        <button onclick="searchBooks()" class="search-button">Suchen</button>
+        <button type="submit" id="searchButton" class="button-red">
+            <span class="button-text">Suchen</span>
+        </button>
     </div>
 
-    <div class="search-types">
-        <button class="search-type active" onclick="setSearchType('standard')">Suche mit Claude</button>
-        <div class="manual-search-heading">Manuelle Auswahl des Suchtyps</div>
-        <div class="secondary-buttons">
-            <button class="search-type secondary" onclick="setSearchType('known-item')">Known Item</button>
-            <button class="search-type secondary" onclick="setSearchType('topic')">Thema</button>
-            <button class="search-type secondary" onclick="setSearchType('basics')">Grundlagenliteratur</button>
-            <button class="search-type secondary" onclick="setSearchType('article')">Artikel</button>
-        </div>
-    </div>
-
-    <div id="searchDescription" class="search-description">
-        Intelligente Suche mit automatischer Analyse durch Claude
+    <div class="basics-option">
+        <label>
+            <input type="checkbox" id="basicsCheckbox">
+            Just give me some basics
+        </label>
     </div>
 
     <div id="claudeAnalysis" class="search-description" style="display: none; background: #e3f2fd; color: #1565c0;">
@@ -198,8 +236,10 @@
     </div>
 
     <div id="searchParams" class="search-params" style="display: none;">
-        <h3>VuFind Suchparameter:</h3>
+        <h3>Suchparameter:</h3>
         <pre id="searchParamsContent"></pre>
+        <h3>Alternative Suchbegriffe:</h3>
+        <pre id="alternativeSearchContent"></pre>
     </div>
 
     <div id="results"></div>
@@ -215,24 +255,26 @@
             event.target.classList.add('active');
             
             const descriptions = {
-                'standard': 'Intelligente Suche mit automatischer Analyse durch Claude',
-                'known-item': 'Suche nach Titel, ISBN, ISSN oder DOI',
+                'known-item': 'Suche nach Autor-/Titelkombinationen, ISBNs oder DOIs',
                 'topic': 'Suche nach Literatur zu einem Thema',
-                'basics': 'Suche nach Einführungsliteratur und Grundlagenwerken',
-                'article': 'Suche nach aktuellen Artikeln (nach Jahr sortiert)'
+                'basics': 'Suche nach Einführungsliteratur und Grundlagenwerken'
             };
             
-            document.getElementById('searchDescription').textContent = descriptions[type];
+            // Aktualisiere die Beschreibungen
+            document.getElementById('known-item-desc').textContent = descriptions['known-item'];
+            document.getElementById('topic-desc').textContent = descriptions['topic'];
+            document.getElementById('basics-desc').textContent = descriptions['basics'];
+            
             document.getElementById('searchInput').placeholder = 
                 type === 'known-item' ? 'Titel, ISBN, ISSN oder DOI eingeben...' :
                 type === 'topic' ? 'Thema eingeben...' :
                 type === 'basics' ? 'Thema für Grundlagenliteratur eingeben...' :
-                type === 'article' ? 'Suchbegriff für Artikel eingeben...' :
                 'Suchbegriff eingeben...';
         }
 
         async function searchBooks() {
             const searchTerm = document.getElementById('searchInput').value;
+            const useBasics = document.getElementById('basicsCheckbox').checked;
             const resultsDiv = document.getElementById('results');
             const searchParamsDiv = document.getElementById('searchParams');
             const searchParamsContent = document.getElementById('searchParamsContent');
@@ -248,7 +290,8 @@
                 // Debug: Zeige Suchanfrage
                 console.log('Frontend sending request:', { 
                     searchTerm, 
-                    searchType: currentSearchType 
+                    searchType: currentSearchType,
+                    forceBasics: useBasics
                 });
 
                 const response = await fetch('/api/search', {
@@ -258,31 +301,44 @@
                     },
                     body: JSON.stringify({ 
                         searchTerm,
-                        searchType: currentSearchType
+                        forceBasics: useBasics
                     })
                 });
 
                 const data = await response.json();
+                console.log('Frontend received data:', data);
+
+                // Zeige die vollständige Analyse an
+                if (data.analysis) {
+                    claudeAnalysisDiv.style.display = 'block';
+                    let analysisText = `Erkannter Suchtyp: ${data.searchType}\n`;
+                    
+                    if (data.analysis.potentialAuthor) {
+                        analysisText += `Autor: ${data.analysis.potentialAuthor}\n`;
+                    }
+                    if (data.analysis.potentialTitle) {
+                        analysisText += `Titel: ${data.analysis.potentialTitle}\n`;
+                    }
+                    if (data.analysis.isStandardWork !== undefined) {
+                        analysisText += `Standardwerk: ${data.analysis.isStandardWork ? 'Ja' : 'Nein'}\n`;
+                    }
+                    
+                    detectedSearchTypeSpan.textContent = analysisText;
+                    detectedSearchTypeSpan.style.whiteSpace = 'pre-line';
+                } else {
+                    console.log('Keine Analyse-Daten gefunden in:', data);
+                    claudeAnalysisDiv.style.display = 'none';
+                }
 
                 // Zeige Suchparameter an
                 if (data.searchParams) {
                     searchParamsDiv.style.display = 'block';
                     searchParamsContent.textContent = JSON.stringify(data.searchParams, null, 2);
-                    
-                    // Zeige den von Claude erkannten Suchtyp an
-                    if (data.detectedSearchType) {
-                        claudeAnalysisDiv.style.display = 'block';
-                        detectedSearchTypeSpan.textContent = data.detectedSearchType;
-                    } else {
-                        claudeAnalysisDiv.style.display = 'none';
-                    }
                 } else {
                     searchParamsDiv.style.display = 'none';
-                    claudeAnalysisDiv.style.display = 'none';
                 }
 
                 // Debug: Zeige empfangene Daten
-                console.log('Frontend received data:', data);
                 console.log('Data type:', typeof data);
                 console.log('Records:', data.records);
                 console.log('Result count:', data.resultCount);
@@ -312,34 +368,72 @@
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
             
-            if (data.error) {
-                resultsDiv.innerHTML = `<p class="error">Fehler: ${data.error}</p>`;
-                return;
-            }
-            
-            if (data.records.length === 0) {
+            if (data.records && data.records.length > 0) {
+                data.records.forEach(record => {
+                    const card = document.createElement('div');
+                    card.className = 'book-card';
+                    
+                    // Titel
+                    const title = record.title || 'Kein Titel';
+                    card.innerHTML = `<h3>${title}</h3>`;
+                    
+                    // Autoren
+                    if (record.authors && record.authors.length > 0) {
+                        const authors = record.authors.join(', ');
+                        card.innerHTML += `<p class="authors">${authors}</p>`;
+                    }
+                    
+                    // Formate
+                    if (record.formats && record.formats.length > 0) {
+                        const formats = record.formats.join(', ');
+                        card.innerHTML += `<p class="formats">${formats}</p>`;
+                    }
+                    
+                    // Publikationsdatum
+                    if (record.publicationDates && record.publicationDates.length > 0) {
+                        const dates = record.publicationDates.join(', ');
+                        card.innerHTML += `<p class="dates">${dates}</p>`;
+                    }
+                    
+                    // ISBN
+                    if (record.cleanIsbn) {
+                        card.innerHTML += `<p class="isbn">ISBN: ${record.cleanIsbn}</p>`;
+                    }
+                    
+                    // DOI
+                    if (record.cleanDoi) {
+                        card.innerHTML += `<p class="doi">DOI: ${record.cleanDoi}</p>`;
+                    }
+                    
+                    // Verlag
+                    if (record.publishers && record.publishers.length > 0) {
+                        const publishers = record.publishers.join(', ');
+                        card.innerHTML += `<p class="publisher">${publishers}</p>`;
+                    }
+                    
+                    // Zusammenfassung
+                    if (record.summary && record.summary.length > 0) {
+                        const summary = record.summary.join(' ');
+                        card.innerHTML += `<p class="summary">${summary}</p>`;
+                    }
+                    
+                    resultsDiv.appendChild(card);
+                });
+            } else {
                 resultsDiv.innerHTML = '<p>Keine Ergebnisse gefunden.</p>';
-                return;
             }
-            
-            resultsDiv.innerHTML = `<p>Gefunden: ${data.resultCount} Ergebnisse</p>`;
-            
-            data.records.forEach(record => {
-                const resultItem = document.createElement('div');
-                resultItem.className = 'result-item';
-                
-                // Basis-Informationen
-                let html = `
-                    <h3>${record.title}</h3>
-                    <div class="metadata">
-                        ${record.authors && record.authors.length > 0 ? `<p><strong>Autoren:</strong> ${record.authors.join('; ')}</p>` : ''}
-                        ${record.publishDate !== 'Kein Jahr' ? `<p><strong>Jahr:</strong> ${record.publishDate}</p>` : ''}
-                    </div>
-                `;
-                resultItem.innerHTML = html;
-                resultsDiv.appendChild(resultItem);
-            });
+
+            if (data.alternativeSearchTerm) {
+                document.getElementById('alternativeSearchContent').textContent = 
+                    `Alternativer Suchbegriff: ${data.alternativeSearchTerm}`;
+            } else {
+                document.getElementById('alternativeSearchContent').textContent = 
+                    'Keine alternativen Suchbegriffe verfügbar';
+            }
         }
+
+        // Event Listener für den Such-Button
+        document.getElementById('searchButton').addEventListener('click', searchBooks);
     </script>
 </body>
 </html>
