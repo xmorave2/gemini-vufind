@@ -114,54 +114,21 @@ app.post('/api/search', async (req, res) => {
         // Basis-Parameter
         searchParams.append('limit', '20');
 
-        // Standardfelder für alle Suchen
+        // Standardfelder für alle Suchen - optimierte Liste
         const standardFields = [
             'title',
             'authors',
-            'primaryAuthors',
-            'secondaryAuthors',
-            'corporateAuthors',
             'formats',
             'publicationDates',
-            'publishDate',
-            'edition',
-            'cleanIsbn',
-            'cleanIssn',
-            'cleanDoi',
             'publishers',
-            'placesOfPublication',
             'languages',
-            'series',
             'summary',
-            'urls'
+            'subjects'
         ];
         
         standardFields.forEach(field => {
             searchParams.append('field[]', field);
         });
-
-        // Füge zusätzliche Felder für die Detailsuche hinzu
-        const detailFields = [
-            'id',
-            'bibliographicLevel',
-            'fullRecord',
-            'shortTitle',
-            'subTitle',
-            'titleStatement',
-            'primaryAuthors',
-            'secondaryAuthors',
-            'corporateAuthors',
-            'physicalDescriptions',
-            'systemDetails',
-            'generalNotes',
-            'bibliographyNotes',
-            'targetAudienceNotes',
-            'accessRestrictions',
-            'toc'
-        ];
-
-        // Kombiniere alle Felder für die Detailsuche
-        const allFields = [...standardFields, ...detailFields];
 
         let analysis;
         if (forceBasics) {
@@ -188,17 +155,18 @@ app.post('/api/search', async (req, res) => {
                 break;
 
             case 'basics':
-                searchParams.set('type', 'AllFields');
+                searchParams.set('type', 'Title');
                 searchParams.set('limit', '20');
                 searchParams.set('sort', 'year');
                 
+                // Nur nach physischen Büchern suchen
+                searchParams.append('filter[]', 'format:"Book"');
+                
                 const basicTerms = [
                     'Introduction', 'Handbook', 'Textbook',
-                    'Fundamentals', 'Principles', 'Basics',
-                    'Guide', 'Manual', 'Overview', 'Review',
+                    'Basics', 'Guide', 'Manual', 'Overview', 'Review',
                     'Einführung', 'Lehrbuch', 'Grundlagen',
-                    'Handbuch', 'Übersicht', 'Comparative',
-                    'Perspectives', 'Methodology', 'Methodik'
+                    'Handbuch', 'Arbeitsbuch'
                 ];
                 
                 const quotedMainTerm = `"${analysis.mainSearchTerm}"`;
