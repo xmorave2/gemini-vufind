@@ -182,16 +182,15 @@ app.post('/api/search', async (req, res) => {
         // Bestehende switch-Statement-Logik wird verwendet
         switch(analysis.searchType) {
             case 'known-item':
-                searchParams.set('type', 'Title');
+                searchParams.set('type', 'AllFields');
                 searchParams.set('lookfor', analysis.mainSearchTerm);
                 searchParams.set('sort', 'year');
                 break;
 
             case 'basics':
-                // Lösche alle existierenden Parameter
-                for (const key of searchParams.keys()) {
-                    searchParams.delete(key);
-                }
+                searchParams.set('type', 'AllFields');
+                searchParams.set('limit', '20');
+                searchParams.set('sort', 'year');
                 
                 const basicTerms = [
                     'Introduction', 'Handbook', 'Textbook',
@@ -202,39 +201,20 @@ app.post('/api/search', async (req, res) => {
                     'Perspectives', 'Methodology', 'Methodik'
                 ];
                 
-                // Hauptsuchbegriff in Anführungszeichen setzen
                 const quotedMainTerm = `"${analysis.mainSearchTerm}"`;
-                
-                // Grundlagenbegriffe mit OR verknüpfen
                 const basicTermsQuery = basicTerms.join(' OR ');
-                
-                // Nur die benötigten Parameter setzen
-                searchParams.set('limit', '20');
-                searchParams.set('type', 'AllFields');
                 searchParams.set('lookfor', `${quotedMainTerm}AND(${basicTermsQuery})`);
                 break;
 
             case 'topic':
-                // Setze Basis-Suchparameter
                 searchParams.set('type', 'AllFields');
-                
-                // Baue Suchstring mit ODER-Verknüpfung
                 let searchString = analysis.mainSearchTerm;
                 if (analysis.alternativeSearchTerm) {
                     searchString += ` OR "${analysis.alternativeSearchTerm}"`;
                 }
-                
-                // Setze kombinierten Suchstring
                 searchParams.set('lookfor', searchString);
-                
-                // Beschränke auf Titel und Schlagwörter
                 searchParams.append('field[]', 'title');
                 searchParams.append('field[]', 'subjects');
-                
-                // Setze Sortierung nur für Nicht-Known-Item Suchen
-                if (analysis.searchType !== 'known-item') {
-                    searchParams.set('sort', 'relevance');
-                }
                 break;
 
             default:
