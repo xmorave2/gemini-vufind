@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototyp VuFind mit Claude</title>
+    <title>Prototype VuFind with Gemini</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <style>
         body {
@@ -212,33 +212,34 @@
     </style>
 </head>
 <body>
-    <h1>VuFindSuche mit Claude</h1>
+    <h1>VuFind search using Gemini</h1>
     <div id="searchDescription" class="search-description">
-        Suche gegen einen VuFind-Index mit automatisierter Differenzierung in Known-Item und thematischer Suche sowie zusätzlicher Möglichkeit, gezielt nach Grundlagenliteratur zu suchen</div>
+        Search for books in the library catalog using Gemini. This is a prototype for a VuFind search with automated differentiation between known-item and thematic search, as well as an additional option to specifically search for foundational literature.
+    </div>
     
 
     <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Suchbegriff eingeben...">
+        <input type="text" id="searchInput" placeholder="Enter search term...">
         <button type="submit" id="searchButton" class="button-red">
-            <span class="button-text">Suchen</span>
+            <span class="button-text">Search</span>
         </button>
     </div>
 
     <div class="basics-option">
         <label>
             <input type="checkbox" id="basicsCheckbox">
-            Nur Grundlagenliteratur, bitte
+            Basic literature only, please
         </label>
     </div>
 
     <div id="claudeAnalysis" class="search-description" style="display: none; background: #e3f2fd; color: #1565c0;">
-        Von Claude erkannter Suchtyp: <span id="detectedSearchType"></span>
+        Search type recognized by Gemini: <span id="detectedSearchType"></span>
     </div>
 
     <div id="searchParams" class="search-params" style="display: none;">
-        <h3>Suchparameter:</h3>
+        <h3>Search paramete:</h3>
         <pre id="searchParamsContent"></pre>
-        <h3>Alternative Suchbegriffe:</h3>
+        <h3>Alternative search term:</h3>
         <pre id="alternativeSearchContent"></pre>
     </div>
 
@@ -266,10 +267,10 @@
             document.getElementById('basics-desc').textContent = descriptions['basics'];
             
             document.getElementById('searchInput').placeholder = 
-                type === 'known-item' ? 'Titel, ISBN, ISSN oder DOI eingeben...' :
-                type === 'topic' ? 'Thema eingeben...' :
-                type === 'basics' ? 'Thema für Grundlagenliteratur eingeben...' :
-                'Suchbegriff eingeben...';
+                type === 'known-item' ? 'Title, ISBN, ISSN or DOI...' :
+                type === 'topic' ? 'Topic...' :
+                type === 'basics' ? 'Topic fo basic literature...' :
+                'Search term...';
         }
 
         async function searchBooks() {
@@ -282,7 +283,7 @@
             const detectedSearchTypeSpan = document.getElementById('detectedSearchType');
             
             if (!searchTerm) {
-                resultsDiv.innerHTML = '<p class="error">Bitte geben Sie einen Suchbegriff ein.</p>';
+                resultsDiv.innerHTML = '<p class="error">Please enter a search term.</p>';
                 return;
             }
 
@@ -311,22 +312,22 @@
                 // Zeige die vollständige Analyse an
                 if (data.analysis) {
                     claudeAnalysisDiv.style.display = 'block';
-                    let analysisText = `Erkannter Suchtyp: ${data.searchType}\n`;
+                    let analysisText = `Detected search type: ${data.searchType}\n`;
                     
                     if (data.analysis.potentialAuthor) {
-                        analysisText += `Autor: ${data.analysis.potentialAuthor}\n`;
+                        analysisText += `Author: ${data.analysis.potentialAuthor}\n`;
                     }
                     if (data.analysis.potentialTitle) {
-                        analysisText += `Titel: ${data.analysis.potentialTitle}\n`;
+                        analysisText += `Title: ${data.analysis.potentialTitle}\n`;
                     }
                     if (data.analysis.isStandardWork !== undefined) {
-                        analysisText += `Standardwerk: ${data.analysis.isStandardWork ? 'Ja' : 'Nein'}\n`;
+                        analysisText += `Standard work: ${data.analysis.isStandardWork ? 'Yes' : 'No'}\n`;
                     }
                     
                     detectedSearchTypeSpan.textContent = analysisText;
                     detectedSearchTypeSpan.style.whiteSpace = 'pre-line';
                 } else {
-                    console.log('Keine Analyse-Daten gefunden in:', data);
+                    console.log('No analysis data found in:', data);
                     claudeAnalysisDiv.style.display = 'none';
                 }
 
@@ -352,7 +353,7 @@
                 // Prüfe ob Ergebnisse vorhanden sind
                 if (!data.records || data.records.length === 0) {
                     console.log('No results found');
-                    resultsDiv.innerHTML = '<p>Keine Ergebnisse gefunden.</p>';
+                    resultsDiv.innerHTML = '<p>No results found.</p>';
                     return;
                 }
 
@@ -360,7 +361,7 @@
 
             } catch (error) {
                 console.error('Search Error:', error);
-                resultsDiv.innerHTML = `<p class="error">Ein Fehler ist aufgetreten: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<p class="error">An error has occurred: ${error.message}</p>`;
             }
         }
 
@@ -373,45 +374,37 @@
                     const card = document.createElement('div');
                     card.className = 'book-card';
                     
-                    // Titel
-                    const title = record.title || 'Kein Titel';
+                    const title = record.title || 'No title';
                     card.innerHTML = `<h3>${title}</h3>`;
                     
-                    // Autoren
                     if (record.authors && record.authors.length > 0) {
                         const authors = record.authors.join(', ');
                         card.innerHTML += `<p class="authors">${authors}</p>`;
                     }
                     
-                    // Formate
                     if (record.formats && record.formats.length > 0) {
                         const formats = record.formats.join(', ');
                         card.innerHTML += `<p class="formats">${formats}</p>`;
                     }
                     
-                    // Publikationsdatum
                     if (record.publicationDates && record.publicationDates.length > 0) {
                         const dates = record.publicationDates.join(', ');
                         card.innerHTML += `<p class="dates">${dates}</p>`;
                     }
                     
-                    // ISBN
                     if (record.cleanIsbn) {
                         card.innerHTML += `<p class="isbn">ISBN: ${record.cleanIsbn}</p>`;
                     }
                     
-                    // DOI
                     if (record.cleanDoi) {
                         card.innerHTML += `<p class="doi">DOI: ${record.cleanDoi}</p>`;
                     }
                     
-                    // Verlag
                     if (record.publishers && record.publishers.length > 0) {
                         const publishers = record.publishers.join(', ');
                         card.innerHTML += `<p class="publisher">${publishers}</p>`;
                     }
                     
-                    // Zusammenfassung
                     if (record.summary && record.summary.length > 0) {
                         const summary = record.summary.join(' ');
                         card.innerHTML += `<p class="summary">${summary}</p>`;
@@ -420,7 +413,7 @@
                     resultsDiv.appendChild(card);
                 });
             } else {
-                resultsDiv.innerHTML = '<p>Keine Ergebnisse gefunden.</p>';
+                resultsDiv.innerHTML = '<p>No results found.</p>';
             }
 
             if (data.alternativeSearchTerm) {

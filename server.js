@@ -1,101 +1,75 @@
 const express = require('express');
 const cors = require('cors');
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenAI } = require("@google/genai");
+const apiKey = process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey: apiKey });
 require('dotenv').config();
 const app = express();
 
 console.log('=== SERVER STARTED ===');
-console.log('Server Zeit:', new Date().toISOString());
-console.log('Anthropic API Key vorhanden:', !!process.env.ANTHROPIC_API_KEY);
-console.log('API Key beginnt mit:', process.env.ANTHROPIC_API_KEY?.substring(0, 7));
+console.log('Time:', new Date().toISOString());
+console.log('API key found:', !!process.env.GEMINI_API_KEY);
+console.log('API Key begins with:', process.env.GEMINI_API_KEY?.substring(0, 7));
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const VUFIND_API_BASE = 'https://hcu-testing-vufind.dev.effective-webwork.de/vufind/api/v1';
+const VUFIND_API_BASE = 'https://knihovny.cz/api/v1';
 
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY
-});
 
-// Funktion zur Bereinigung der Suchanfrage
+// Clean up the search term by removing stop words
 function cleanSearchQuery(searchTerm) {
-    // Liste von Wörtern, die aus der Suche entfernt werden sollen
     const stopWords = [
-        'zeig', 'mir', 'ich', 'suche', 'nach', 'bitte', 'kannst', 'du',
-        'finde', 'für', 'mich', 'brauche', 'ich', 'will', 'ich', 'habe',
-        'ich', 'gesucht', 'suchen', 'möchte', 'ich', 'könntest', 'du',
-        'würdest', 'du', 'kannst', 'du', 'bitte', 'mal', 'zeig', 'mir',
-        'bitte', 'mal', 'alle', 'die', 'der', 'das', 'eine', 'ein',
-        'über', 'von', 'zu', 'und', 'oder', 'aber', 'dass', 'ob',
-        'literatur', 'bücher', 'artikel', 'texte', 'dokumente'
+        'a', 'and', 'z', 'i', 'v', 'ze', 've', 'nad', 'pod'
     ];
 
-    // Konvertiere zu Kleinbuchstaben und teile in Wörter
+    // Normalize the search term to lowercase and split it into words
     let words = searchTerm.toLowerCase().split(/\s+/);
     
-    // Entferne Stop-Wörter
+    // Remove stop words
     words = words.filter(word => !stopWords.includes(word));
-    
-    // Füge die verbleibenden Wörter wieder zusammen
+
     return words.join(' ').trim();
 }
 
-// Funktion zur Analyse der Suchbegriffe mit Claude (Claude-Supported Search)
+// Analyse the search term using Gemini
 async function analyzeSearchQuery(searchTerm) {
     try {
         const cleanedTerm = cleanSearchQuery(searchTerm);
         
-        console.log('\n=== Claude-Analyse Start ===');
-        console.log('Bereinigter Suchbegriff:', cleanedTerm);
+        console.log('\n=== Gemini analyse start ===');
+        console.log('Search phrase:', cleanedTerm);
         
-        console.log('Sende Anfrage an Claude...');
-        const message = await anthropic.messages.create({
-            model: "claude-3-opus-20240229",
-            max_tokens: 1024,
-            messages: [{
-                role: "user",
-                content: cleanedTerm
-            }],
-            system: `Du bist ein Recherchesystem für bibliografische Metadaten aus wissenschaftlichen Bibliotheken.
+        console.log('Sending to Gemini...');
+        const prompt = 'You are a bibliographic metadata research system for scientific libraries. ' +
+            'Analyze the search term and identify the main concepts. ' +
+            'Generate ONE alternative search term that is related to term "' +
+            searchTerm +
+            '", uses different but semantically similar words, describes the same topic from a different perspective, and is in the same language as the input. ' +
+            'Return the analysis in JSON format: { "analysis": { "potentialAuthor": "author name", "potentialTitle": "other words" }, "searchType": "known-item" or "topic", "mainSearchTerm": "original search query", "alternativeSearchTerm": "German alternative search term", "filters": [], "sort": "relevance" }';
 
-EINGABE-ANALYSE:
-1. Analysiere den Suchbegriff und identifiziere die Hauptkonzepte
-2. Generiere EINEN alternativen Suchbegriff, der:
-   - inhaltlich verwandt ist
-   - andere, aber bedeutungsähnliche Wörter verwendet
-   - das gleiche Thema aus einem anderen Blickwinkel beschreibt
-   - in der gleichen Sprache wie die Eingabe ist
-
-Antworte IMMER mit diesem JSON-Format:
-{
-    "analysis": {
-        "potentialAuthor": das Wort, das wie ein Name aussieht (wenn gefunden),
-        "potentialTitle": die anderen Wörter
-    },
-    "searchType": "known-item" oder "topic",
-    "mainSearchTerm": originale Suchanfrage,
-    "alternativeSearchTerm": deutscher alternativer Suchbegriff,
-    "filters": [],
-    "sort": "relevance"
-}`
+        const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: prompt,
         });
-        console.log('Claude-Antwort erhalten!');
-        
-        const analysis = JSON.parse(message.content[0].text);
+
+        console.log('Prompt sent to Gemini');
+        console.log('Response received from Gemini: ' + response.text);
+        console.log('Trimmed response:', response.text.replaceAll('```json', '').replaceAll('```', ''));
+        const analysis = JSON.parse(response.text.replace('```json', '').replaceAll('```', ''));
         return analysis;
     } catch (error) {
-        console.error('\n=== Claude-Analyse Fehler ===');
-        console.error('Fehlertyp:', error.constructor.name);
-        console.error('Fehlermeldung:', error.message);
-        throw error; // Werfen Sie den Fehler, damit wir ihn in der Konsole sehen
+        console.error('\n=== Gemini search term analysis failed ===');
+        console.error('Error code:', error.constructor.name);
+        console.error('Error message:', error.message);
+        throw error;
     }
 }
 
 app.post('/api/search', async (req, res) => {
-    console.log('\n=== NEUE SUCHANFRAGE ===');
-    console.log('Zeit:', new Date().toISOString());
+    console.log('\n=== NEW SEARCH ===');
+    console.log('Time:', new Date().toISOString());
     console.log('Request Body:', JSON.stringify(req.body, null, 2));
     console.log('========================\n');
     
@@ -110,11 +84,8 @@ app.post('/api/search', async (req, res) => {
         }
 
         let searchParams = new URLSearchParams();
-        
-        // Basis-Parameter
         searchParams.append('limit', '20');
 
-        // Standardfelder für alle Suchen - optimierte Liste
         const standardFields = [
             'title',
             'authors',
@@ -132,7 +103,6 @@ app.post('/api/search', async (req, res) => {
 
         let analysis;
         if (forceBasics) {
-            // Vollständiges analysis-Objekt erstellen
             analysis = {
                 searchType: 'basics',
                 mainSearchTerm: searchTerm,
@@ -142,11 +112,9 @@ app.post('/api/search', async (req, res) => {
                 alternativeSearchTerm: null
             };
         } else {
-            // Normale Analyse durch Claude
             analysis = await analyzeSearchQuery(searchTerm);
         }
 
-        // Bestehende switch-Statement-Logik wird verwendet
         switch(analysis.searchType) {
             case 'known-item':
                 searchParams.set('type', 'AllFields');
@@ -159,14 +127,11 @@ app.post('/api/search', async (req, res) => {
                 searchParams.set('limit', '20');
                 searchParams.set('sort', 'year');
                 
-                // Nur nach physischen Büchern suchen
                 searchParams.append('filter[]', 'format:"Book"');
                 
                 const basicTerms = [
                     'Introduction', 'Handbook', 'Textbook',
                     'Basics', 'Guide', 'Manual', 'Overview', 'Review',
-                    'Einführung', 'Lehrbuch', 'Grundlagen',
-                    'Handbuch', 'Arbeitsbuch'
                 ];
                 
                 const quotedMainTerm = `"${analysis.mainSearchTerm}"`;
@@ -190,24 +155,23 @@ app.post('/api/search', async (req, res) => {
                 break;
         }
 
-        // Wende zusätzliche Filter an
         if (analysis.filters) {
             analysis.filters.forEach(filter => {
                 searchParams.append('filter[]', filter);
             });
         }
 
-        // Debug: URL ausgeben
+        // Debug: Vufind API URL
         const searchUrl = `${VUFIND_API_BASE}/search?${searchParams.toString()}`;
         console.log('\n=== Claude-Supported Search: VuFind Suchanfrage ===');
-        console.log('Suchbegriff:', searchTerm);
-        console.log('Suchparameter:', Object.fromEntries(searchParams));
-        console.log('Vollständige URL:', searchUrl);
+        console.log('Search term:', searchTerm);
+        console.log('Parameters:', Object.fromEntries(searchParams));
+        console.log('API URL:', searchUrl);
         console.log('========================\n');
 
         const response = await fetch(searchUrl, {
             headers: {
-                'User-Agent': 'BookSearch/1.0',
+                'User-Agent': 'KnihovnyCzAI/1.0',
                 'Accept': 'application/json'
             }
         });
@@ -222,16 +186,16 @@ app.post('/api/search', async (req, res) => {
 
         const data = await response.json();
 
-        // Debug: Vollständige API-Antwort
-        console.log('\n=== Claude-Supported Search: API-Antwort ===');
-        console.log('Anzahl gefundener Records:', data.resultCount);
+        // Debug: Vufind API response
+        console.log('\n=== Gemini-Supported Search: API Response ===');
+        console.log('Number of records found:', data.resultCount);
         console.log('Status:', data.status);
-        console.log('Vollständige Antwort:', JSON.stringify(data, null, 2));
+        console.log('API response:', JSON.stringify(data, null, 2));
         console.log('========================\n');
 
         // Prüfe ob records vorhanden sind
         if (!data.records) {
-            console.error('Claude-Supported Search: Keine Records in der Antwort');
+            console.error('Gemini-Supported Search: No records found');
             return res.json({ records: [], resultCount: 0 });
         }
 
@@ -249,7 +213,7 @@ app.post('/api/search', async (req, res) => {
         };
 
         // Debug: Formatierte Antwort
-        console.log('=== Formatierte Server-Antwort ===');
+        console.log('=== Formatted response ===');
         if (analysis.searchType === 'basics') {
             console.log('Analysis:', {
                 searchType: 'basics',
@@ -277,5 +241,5 @@ app.post('/api/search', async (req, res) => {
 });
 
 app.listen(3001, () => {
-    console.log('Server läuft auf Port 3001');
+    console.log('Server running on port 3001');
 });
