@@ -1,249 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prototype VuFind with Gemini</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.4/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-DQvkBjpPgn7RC31MCQoOeC9TI2kdqa4+BSgNMNj8v77fdC77Kj5zpWFTJaaAoMbC" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.4/dist/js/bootstrap.bundle.min.js" integrity="sha384-YUe2LzesAfftltw+PEaao2tjU/QATaW/rOitAq67e0CT0Zi2VVRL0oC4+gAaeBKu" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 0 20px;
-            background-color: #f5f5f5;
-        }
-        .search-box {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        #searchInput {
-            flex-grow: 1;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .search-button {
-            padding: 12px 25px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .search-types {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .search-type {
-            padding: 10px;
-            border: 2px solid #4CAF50;
-            border-radius: 5px;
-            cursor: pointer;
-            text-align: center;
-            background: white;
-            color: #4CAF50;
-        }
-        .search-type.active {
-            background: #4CAF50;
-            color: white;
-        }
-        .manual-search-heading {
-            margin-top: 20px;
-            margin-bottom: 10px;
-            color: #666;
-            font-size: 0.9em;
-            text-align: center;
-        }
-        .search-type.secondary {
-            font-size: 0.85em;
-            padding: 6px;
-            margin: 2px 0;
-            white-space: nowrap;
-        }
-        .secondary-buttons {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin: 0 auto;
-            max-width: 600px;
-        }
-        .search-type-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 5px;
-        }
-        .search-type.secondary {
-            font-size: 0.85em;
-            padding: 6px 12px;
-            white-space: nowrap;
-            min-width: 150px;
-        }
-        .search-description {
-            margin-bottom: 20px;
-            padding: 10px;
-            background: #e8f5e9;
-            border-radius: 5px;
-            color: #2e7d32;
-            flex-grow: 1;
-        }
-        .book-card {
-            background: white;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .book-card h3 {
-            margin: 0 0 10px 0;
-            color: #2c3e50;
-            font-size: 1.2em;
-        }
-        .book-card p {
-            margin: 8px 0;
-            color: #666;
-            font-size: 0.95em;
-        }
-        .book-card .authors {
-            color: #2c3e50;
-            font-weight: 500;
-        }
-        .book-card .formats {
-            display: inline-block;
-            background: #e8f5e9;
-            color: #2e7d32;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 0.9em;
-        }
-        .book-card .dates {
-            color: #666;
-            font-style: italic;
-        }
-        .book-card .isbn, .book-card .doi {
-            color: #1976d2;
-            font-family: monospace;
-        }
-        .book-card .publisher {
-            color: #666;
-            font-style: italic;
-        }
-        .book-card .summary {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #eee;
-            color: #555;
-            line-height: 1.5;
-        }
-        .error {
-            color: #d32f2f;
-            background: #ffebee;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        .result-item {
-            border: 1px solid #ddd;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-            background-color: #fff;
-        }
-        .result-item h3 {
-            margin: 0 0 10px 0;
-            color: #2c3e50;
-        }
-        .result-item p {
-            margin: 5px 0;
-            color: #666;
-        }
-        .result-item .metadata {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 10px;
-        }
-        .result-item .metadata span {
-            margin-right: 15px;
-        }
-        .result-item .subjects {
-            margin-top: 10px;
-        }
-        .result-item .subjects span {
-            background-color: #f0f0f0;
-            padding: 2px 8px;
-            border-radius: 3px;
-            margin-right: 5px;
-            font-size: 0.9em;
-        }
-        .result-item .languages {
-            margin-top: 5px;
-            font-size: 0.9em;
-            color: #666;
-        }
-        .result-item .series {
-            margin-top: 5px;
-            font-style: italic;
-            color: #666;
-        }
-        .search-params {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .search-params h3 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #2c3e50;
-        }
-        .search-params pre {
-            margin: 0;
-            white-space: pre-wrap;
-        }
-        .hidden {
-            display: none !important;
-        }
-    </style>
 </head>
 <body>
-    <h1>VuFind search using Gemini</h1>
-    <div id="searchDescription" class="search-description">
-        Search for books in the library catalog using Gemini. This is a prototype for a VuFind search with automated differentiation between known-item and thematic search, as well as an additional option to specifically search for foundational literature.
-    </div>
-    
+    <div class="container">
+        <div class="row">
+            <div class="col mt-3">
+                <h1>VuFind search using Gemini</h1>
+                <div id="searchDescription" class="search-description mb-3 alert alert-info">
+                    Search for books in the library catalog using Gemini. This is a prototype for a VuFind search with automated differentiation between known-item and thematic search, as well as an additional option to specifically search for foundational literature.
+                </div>
 
-    <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Enter search term...">
-        <button type="submit" id="searchButton" class="button-red">
-            <span class="button-text">Search</span>
-        </button>
+                <div class="search-box">
+                    <div class="mb-3">
+                        <label for="searchInput" class="form-label">Search term:</label>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Enter search term...">
+                    </div>
+                    <button type="submit" id="searchButton" class="btn btn-primary">
+                        <span class="button-text">Search</span>
+                    </button>
+                </div>
+
+                <div class="basics-option">
+                    <label>
+                        <input type="checkbox" id="basicsCheckbox">
+                        Basic literature only, please
+                    </label>
+                </div>
+
+                <div id="analysis" class="search-description alert alert-info" style="display: none">
+                    Search type recognized by Gemini: <span id="detectedSearchType"></span>
+                </div>
+
+                <div id="searchParams" class="search-params alert alert-light" style="display: none;">
+                    <h3>Search parameters:</h3>
+                    <pre id="searchParamsContent"></pre>
+                    <h3>Alternative search term:</h3>
+                    <pre id="alternativeSearchContent"></pre>
+                </div>
+
+                <div id="results"></div>
+            </div>
+        </div>
+
     </div>
 
-    <div class="basics-option">
-        <label>
-            <input type="checkbox" id="basicsCheckbox">
-            Basic literature only, please
-        </label>
-    </div>
-
-    <div id="claudeAnalysis" class="search-description" style="display: none; background: #e3f2fd; color: #1565c0;">
-        Search type recognized by Gemini: <span id="detectedSearchType"></span>
-    </div>
-
-    <div id="searchParams" class="search-params" style="display: none;">
-        <h3>Search paramete:</h3>
-        <pre id="searchParamsContent"></pre>
-        <h3>Alternative search term:</h3>
-        <pre id="alternativeSearchContent"></pre>
-    </div>
-
-    <div id="results"></div>
 
     <script>
         let currentSearchType = 'standard';
@@ -279,7 +86,7 @@
             const resultsDiv = document.getElementById('results');
             const searchParamsDiv = document.getElementById('searchParams');
             const searchParamsContent = document.getElementById('searchParamsContent');
-            const claudeAnalysisDiv = document.getElementById('claudeAnalysis');
+            const analysisDiv = document.getElementById('analysis');
             const detectedSearchTypeSpan = document.getElementById('detectedSearchType');
             
             if (!searchTerm) {
@@ -311,7 +118,7 @@
 
                 // Zeige die vollständige Analyse an
                 if (data.analysis) {
-                    claudeAnalysisDiv.style.display = 'block';
+                    analysisDiv.style.display = 'block';
                     let analysisText = `Detected search type: ${data.searchType}\n`;
                     
                     if (data.analysis.potentialAuthor) {
@@ -328,7 +135,7 @@
                     detectedSearchTypeSpan.style.whiteSpace = 'pre-line';
                 } else {
                     console.log('No analysis data found in:', data);
-                    claudeAnalysisDiv.style.display = 'none';
+                    analysisDiv.style.display = 'none';
                 }
 
                 // Zeige Suchparameter an
@@ -372,44 +179,46 @@
             if (data.records && data.records.length > 0) {
                 data.records.forEach(record => {
                     const card = document.createElement('div');
-                    card.className = 'book-card';
-                    
+                    card.className = 'card mb-3';
+                    let cardContent = '<div class="card-body">';
                     const title = record.title || 'No title';
-                    card.innerHTML = `<h3>${title}</h3>`;
+                    const id = record.id || 'No ID';
+                    cardContent += `<h3><a href="https://www.knihovny.cz/Record/${id}" target="_blank">${title}</a></h3>`;
                     
                     if (record.authors && record.authors.length > 0) {
                         const authors = record.authors.join(', ');
-                        card.innerHTML += `<p class="authors">${authors}</p>`;
+                        cardContent += `<p class="authors">${authors}</p>`;
                     }
                     
                     if (record.formats && record.formats.length > 0) {
                         const formats = record.formats.join(', ');
-                        card.innerHTML += `<p class="formats">${formats}</p>`;
+                        cardContent += `<p class="formats">${formats}</p>`;
                     }
                     
                     if (record.publicationDates && record.publicationDates.length > 0) {
                         const dates = record.publicationDates.join(', ');
-                        card.innerHTML += `<p class="dates">${dates}</p>`;
+                        cardContent += `<p class="dates">${dates}</p>`;
                     }
                     
                     if (record.cleanIsbn) {
-                        card.innerHTML += `<p class="isbn">ISBN: ${record.cleanIsbn}</p>`;
+                        cardContent += `<p class="isbn">ISBN: ${record.cleanIsbn}</p>`;
                     }
                     
                     if (record.cleanDoi) {
-                        card.innerHTML += `<p class="doi">DOI: ${record.cleanDoi}</p>`;
+                        cardContent += `<p class="doi">DOI: ${record.cleanDoi}</p>`;
                     }
                     
                     if (record.publishers && record.publishers.length > 0) {
                         const publishers = record.publishers.join(', ');
-                        card.innerHTML += `<p class="publisher">${publishers}</p>`;
+                        cardContent += `<p class="publisher">${publishers}</p>`;
                     }
                     
                     if (record.summary && record.summary.length > 0) {
                         const summary = record.summary.join(' ');
-                        card.innerHTML += `<p class="summary">${summary}</p>`;
+                        cardContent += `<p class="summary">${summary}</p>`;
                     }
-                    
+                    cardContent += '</div>';
+                    card.innerHTML = cardContent;
                     resultsDiv.appendChild(card);
                 });
             } else {
@@ -418,10 +227,10 @@
 
             if (data.alternativeSearchTerm) {
                 document.getElementById('alternativeSearchContent').textContent = 
-                    `Alternativer Suchbegriff: ${data.alternativeSearchTerm}`;
+                    `Alternative search term: ${data.alternativeSearchTerm}`;
             } else {
                 document.getElementById('alternativeSearchContent').textContent = 
-                    'Keine alternativen Suchbegriffe verfügbar';
+                    'No alternative search terms available';
             }
         }
 

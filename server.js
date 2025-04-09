@@ -17,7 +17,6 @@ app.use(express.static('public'));
 
 const VUFIND_API_BASE = 'https://knihovny.cz/api/v1';
 
-
 // Clean up the search term by removing stop words
 function cleanSearchQuery(searchTerm) {
     const stopWords = [
@@ -44,10 +43,10 @@ async function analyzeSearchQuery(searchTerm) {
         console.log('Sending to Gemini...');
         const prompt = 'You are a bibliographic metadata research system for scientific libraries. ' +
             'Analyze the search term and identify the main concepts. ' +
-            'Generate ONE alternative search term that is related to term "' +
+            'Generate ONE alternative search term that is related to search term "' +
             searchTerm +
-            '", uses different but semantically similar words, describes the same topic from a different perspective, and is in the same language as the input. ' +
-            'Return the analysis in JSON format: { "analysis": { "potentialAuthor": "author name", "potentialTitle": "other words" }, "searchType": "known-item" or "topic", "mainSearchTerm": "original search query", "alternativeSearchTerm": "German alternative search term", "filters": [], "sort": "relevance" }';
+            '", uses different but semantically similar words, describes the same topic from a different perspective, and is in the same language as the search term. ' +
+            'Return the analysis in JSON format: { "analysis": { "potentialAuthor": "author name", "potentialTitle": "other words" }, "searchType": "known-item" or "topic", "mainSearchTerm": "original search query", "alternativeSearchTerm": "Czech alternative search term", "filters": [], "sort": "relevance" }';
 
         const response = await ai.models.generateContent({
             model: "gemini-2.0-flash",
@@ -87,6 +86,7 @@ app.post('/api/search', async (req, res) => {
         searchParams.append('limit', '20');
 
         const standardFields = [
+            'id',
             'title',
             'authors',
             'formats',
